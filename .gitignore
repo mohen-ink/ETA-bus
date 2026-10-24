@@ -7,3 +7,14 @@ local.properties
 !.env.example
 !.env.sample
 !.env.template
+.gradle/
+.kotlin/
+.idea/
+**/build/
+*.iml
+*.jks
+*.keystore
+*.p12
+*.pfx
+keystore/
+keystore.properties
