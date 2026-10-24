@@ -1,0 +1,9 @@
+.probe/
+__pycache__/
+*.pyc
+local.properties
+.env
+.env.*
+!.env.example
+!.env.sample
+!.env.template
