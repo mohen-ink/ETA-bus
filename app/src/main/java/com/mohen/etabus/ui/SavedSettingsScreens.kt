@@ -26,6 +26,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.mohen.etabus.model.*
+import com.mohen.etabus.update.AppUpdateViewModel
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
@@ -197,7 +198,7 @@ internal fun FavoritesScreen(state: BusUiState, model: BusViewModel, actions: Ui
 }
 
 @Composable
-internal fun SettingsScreen(state: BusUiState, model: BusViewModel, actions: UiActions) {
+internal fun SettingsScreen(state: BusUiState, model: BusViewModel, actions: UiActions, updates: AppUpdateViewModel) {
     var options by remember { mutableStateOf<String?>(null) }
     var clear by remember { mutableStateOf<String?>(null) }
     var source by remember { mutableStateOf(false) }
@@ -241,6 +242,7 @@ internal fun SettingsScreen(state: BusUiState, model: BusViewModel, actions: UiA
                 SettingRow("数据来源", "", { source = true })
                 SettingRow("开源许可", "", { actions.navigate("license") })
                 SettingRow("版本", version, null)
+                SettingRow("检查更新", "GitHub Release", { actions.network { updates.check() } })
             }
         }
         item { Text("到站信息仅供参考，请以实际运营为准。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 12.dp)) }
@@ -275,9 +277,10 @@ internal fun SettingsScreen(state: BusUiState, model: BusViewModel, actions: UiA
     })
     if (source) AlertDialog(onDismissRequest = { source = false }, title = { Text("数据来源说明") }, text = {
         Column(Modifier.verticalScroll(rememberScrollState())) {
-            Text("公交数据：掌上公交。各城市数据覆盖情况以实际查询结果为准。\n\n地图与定位：高德地图。\n\n实时到站：第一辆车为公交平台实时预测；第二辆车根据车辆实时位置估算，仅供参考。\n\n本地存储：设置、浏览历史和收藏仅保存在本机，按城市分别保存。")
+            Text("公交数据：掌上公交。各城市数据覆盖情况以实际查询结果为准。\n\n地图与定位：高德地图。\n\n实时到站：第一辆车为公交平台实时预测；第二辆车根据车辆实时位置估算，仅供参考。\n\n应用更新：手动从 GitHub 仓库 mohen-ink/ETA-bus 查询最新正式版，确认后下载 APK，不发送定位数据。安装由系统确认，不自动或静默更新。\n\n本地存储：设置、浏览历史和收藏仅保存在本机，按城市分别保存；更新安装包保存在本应用的私有缓存目录。")
         }
     }, confirmButton = { TextButton({ source = false }) { Text("知道了") } })
+    AppUpdateDialog(updates, version, actions.network)
 }
 
 private const val GITHUB_URL = "https://github.com/mohen-ink/ETA-bus"

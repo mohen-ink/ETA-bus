@@ -8,6 +8,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.lifecycle.ViewModelProvider
 import com.mohen.etabus.ui.BusApp
 import com.mohen.etabus.ui.BusViewModel
+import com.mohen.etabus.update.AppUpdateViewModel
 import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.HiltAndroidApp
 
@@ -20,6 +21,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         val model = ViewModelProvider(this)[BusViewModel::class.java]
-        setContent { BusApp(model) }
+        val updates = ViewModelProvider(this)[AppUpdateViewModel::class.java]
+        setContent { BusApp(model, updates) }
     }
 }

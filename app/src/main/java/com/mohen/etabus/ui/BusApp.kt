@@ -24,6 +24,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.compose.*
 import com.mohen.etabus.BuildConfig
 import com.mohen.etabus.model.*
+import com.mohen.etabus.update.AppUpdateViewModel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
@@ -42,7 +43,7 @@ internal data class UiActions(
 )
 
 @Composable
-fun BusApp(model: BusViewModel) {
+fun BusApp(model: BusViewModel, updates: AppUpdateViewModel) {
     val state by model.ui.collectAsStateWithLifecycle()
     BusTheme(state.settings) {
         val nav = rememberNavController()
@@ -166,7 +167,7 @@ fun BusApp(model: BusViewModel) {
                     composable("station") { StationScreen(state, model, actions) }
                     composable("route") { RouteScreen(state, model, actions) }
                     composable("favorites") { FavoritesScreen(state, model, actions, snackbar) }
-                    composable("settings") { SettingsScreen(state, model, actions) }
+                    composable("settings") { SettingsScreen(state, model, actions, updates) }
                     composable("license") { LicenseScreen(actions.back, actions.network) }
                 }
             }
@@ -174,7 +175,7 @@ fun BusApp(model: BusViewModel) {
         if (privacyDialog) AlertDialog(
             onDismissRequest = { privacyDialog = false; pending = null },
             title = { Text("隐私与数据使用说明") },
-            text = { Text("秒查公交的线路与到站信息来自掌上公交。查询时会向公交平台发送所选城市、站名及位置坐标。地图与定位由高德地图提供，高德会处理位置信息及提供服务所需的设备信息。\n\n同意后才会联网、定位和加载地图。您也可以暂不同意，继续浏览本地的设置、历史与收藏。") },
+            text = { Text("秒查公交的线路与到站信息来自掌上公交。查询时会向公交平台发送所选城市、站名及位置坐标。地图与定位由高德地图提供，高德会处理位置信息及提供服务所需的设备信息。\n\n手动检查更新会连接 GitHub 获取公开版本信息，确认下载后从 GitHub 获取安装包，不发送定位数据。安装由系统确认；安装来源授权仅用于更新本应用。\n\n同意后才会联网、定位和加载地图。您也可以暂不同意，继续浏览本地的设置、历史与收藏。") },
             confirmButton = { TextButton({
                 privacyDialog = false
                 val action = pending
