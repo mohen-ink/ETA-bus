@@ -196,7 +196,7 @@ class BusViewModel @Inject constructor(
                 mutable.update { it.copy(userPoint = result.point, locatedCity = result.cityName) }
                 if (match?.code == mutable.value.city.code) setCenter(result.point, retainNearby = true)
                 else {
-                    val text = "定位城市为${result.cityName.ifBlank { "未知" }}，请切换到对应城市或手动设置当前城市查询中心"
+                    val text = "当前定位在${result.cityName.ifBlank { "其他城市" }}，可切换城市或手动设置位置"
                     mutable.update { it.copy(errors = it.errors + ("location" to text)) }
                     message(text)
                 }
@@ -354,7 +354,7 @@ class BusViewModel @Inject constructor(
                 store.cacheRoute(city.code, detail)
                 store.record(routeItem(selection))
                 if (platform != null) fetchPlatform(platform, requestOwner, city)
-                else if (oldName != null) message("反方向未找到可查询的同名站台，请选择等车站")
+                else if (oldName != null) message("反方向没有同名站台，请重新选择等车站")
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) { error("route", e) }
             finally { mutable.update { it.copy(loading = false) } }
@@ -368,7 +368,7 @@ class BusViewModel @Inject constructor(
         val platform = point?.let { Platform(detail.stations[index], it) }
         val selection = mutable.value.selection ?: return
         mutable.update { it.copy(selection = selection.copy(platform = platform, stationIndex = index), alightingIndex = null) }
-        platform?.let { loadPlatform(it) } ?: message("该站点坐标缺失，无法查询实时到站")
+        platform?.let { loadPlatform(it) } ?: message("该站暂不支持实时查询")
         viewModelScope.launch { store.record(routeItem(mutable.value.selection ?: selection)) }
     }
 
@@ -407,7 +407,7 @@ class BusViewModel @Inject constructor(
                 try { stations = groupPlatforms(api.nearby(city, center, mutable.value.settings.radius, query.trim(), requestOwner), center) }
                 catch (e: CancellationException) { throw e }
                 catch (e: Exception) { warnings += e.message ?: "站点搜索失败" }
-            } else warnings += "站点关键词查询需要当前城市的坐标，请先定位或设置查询中心；无坐标线路查询的兼容性尚未验证"
+            } else warnings += "搜索站点需要先定位或设置位置"
             mutable.update { it.copy(searchRoutes = routes, searchStations = stations, searchLoading = false,
                 searchWarning = warnings.takeIf { list -> list.isNotEmpty() }?.joinToString("\n")) }
         }
@@ -508,7 +508,6 @@ class BusViewModel @Inject constructor(
             val state = mutable.value
             val requestOwner = owner
             if (!state.settings.privacyAccepted) return
-            mutable.update { it.copy(refreshing = true) }
             when (state.page) {
                 "home" -> if (!homeHistory) queryVisible(nearbyPlatforms(), "home", 1)
                 "station" -> state.platform?.let { fetchPlatform(it, requestOwner, state.city, 1) }
@@ -524,7 +523,6 @@ class BusViewModel @Inject constructor(
                 "favorites" -> queryVisible(favoritePlatforms(), "favorites", 1)
             }
         } finally {
-            mutable.update { it.copy(refreshing = false) }
             refreshMutex.unlock()
         }
     }

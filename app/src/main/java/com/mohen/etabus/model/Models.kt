@@ -46,7 +46,9 @@ data class BusVehicle(
     val point: GeoPoint?, val busNumber: String, val crowdedStatus: String = "",
     val fittedDistance: Double = 0.0, val fittedIndex: Int = 0, val angle: Double = 0.0,
     val recordedAt: Long = 0, val unknownTail: ByteArray = byteArrayOf()
-) : Serializable
+) : Serializable {
+    val approaching: Boolean get() = statusType == "2"
+}
 
 data class RouteDetail(
     val routeName: String, val direction: String, val stationIndex: Int, val stationName: String,

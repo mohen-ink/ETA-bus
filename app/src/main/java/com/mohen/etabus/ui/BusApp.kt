@@ -73,13 +73,13 @@ fun BusApp(model: BusViewModel) {
             permissionInFlight = false
             locationGranted = hasLocationPermission()
             if (locationGranted) model.locate()
-            else model.message("未授予定位权限，仍可搜索线路或手动设置查询中心")
+            else model.message("未授予定位权限，可手动设置位置或直接搜索线路")
         }
         val locate: () -> Unit = {
             gate {
                 locationGranted = hasLocationPermission()
                 if (!BuildConfig.AMAP_CONFIGURED) {
-                    model.message("尚未配置高德 Key，请手动设置当前城市查询中心")
+                    model.message("暂时无法定位，请手动设置位置")
                     centerDialog = true
                 } else if (locationGranted) {
                     model.locate()
@@ -108,9 +108,10 @@ fun BusApp(model: BusViewModel) {
             if (state.ready && !state.settings.privacyAccepted && !privacySeen) { privacySeen = true; privacyDialog = true }
         }
         LaunchedEffect(destination) { model.onPage(destination) }
+        var autoLocated by rememberSaveable { mutableStateOf(false) }
         LaunchedEffect(state.ready, state.settings.privacyAccepted, destination, resumed, locationGranted, permissionInFlight) {
-            if (state.ready && state.settings.privacyAccepted && destination == "home" && resumed && BuildConfig.AMAP_CONFIGURED) {
-                if (locationGranted && !permissionInFlight && !model.ui.value.locating) model.locate()
+            if (!autoLocated && state.ready && state.settings.privacyAccepted && destination == "home" && resumed && BuildConfig.AMAP_CONFIGURED) {
+                if (locationGranted && !permissionInFlight && !model.ui.value.locating) { autoLocated = true; model.locate() }
                 else if (!locationGranted && !permissionRequested && !permissionInFlight) locate()
             }
         }
@@ -173,7 +174,7 @@ fun BusApp(model: BusViewModel) {
         if (privacyDialog) AlertDialog(
             onDismissRequest = { privacyDialog = false; pending = null },
             title = { Text("隐私与数据使用说明") },
-            text = { Text("秒查公交的线路与到站信息来自掌上公交服务端，准确性及各城市可用性以实际返回为准。查询时会向对应城市服务端发送城市、站名及查询中心坐标。地图与定位使用高德地图，高德会处理位置信息及提供服务所需的设备信息。\n\n仅在您同意后访问网络或初始化地图/定位 SDK。同意后会请求系统定位权限；如果已经授权，将直接定位并刷新附近站点。您可拒绝并浏览本地设置、历史与收藏，也可进入搜索页；发起在线查询前会再次询问。") },
+            text = { Text("秒查公交的线路与到站信息来自掌上公交。查询时会向公交平台发送所选城市、站名及位置坐标。地图与定位由高德地图提供，高德会处理位置信息及提供服务所需的设备信息。\n\n同意后才会联网、定位和加载地图。您也可以暂不同意，继续浏览本地的设置、历史与收藏。") },
             confirmButton = { TextButton({
                 privacyDialog = false
                 val action = pending
@@ -198,17 +199,17 @@ private fun CenterDialog(city: String, center: GeoPoint?, dismiss: () -> Unit, s
     var lat by remember { mutableStateOf(center?.lat?.toString().orEmpty()) }
     var lng by remember { mutableStateOf(center?.lng?.toString().orEmpty()) }
     var error by remember { mutableStateOf(false) }
-    AlertDialog(onDismissRequest = dismiss, title = { Text("设置 $city 查询中心") }, text = {
+    AlertDialog(onDismissRequest = dismiss, title = { Text("设置${city}位置") }, text = {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("请输入当前城市的 GCJ-02 纬度和经度。不会使用其他城市的默认坐标；切换城市后须重新设置。", style = MaterialTheme.typography.bodySmall)
-            OutlinedTextField(lat, { lat = it; error = false }, label = { Text("纬度 lat（-90 至 90）") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
-            OutlinedTextField(lng, { lng = it; error = false }, label = { Text("经度 lng（-180 至 180）") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
-            if (error) Text("请输入有效的经纬度，不能同时为 0", color = MaterialTheme.colorScheme.error)
+            Text("请输入所在位置的纬度和经度，切换城市后需要重新设置。", style = MaterialTheme.typography.bodySmall)
+            OutlinedTextField(lat, { lat = it; error = false }, label = { Text("纬度") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
+            OutlinedTextField(lng, { lng = it; error = false }, label = { Text("经度") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
+            if (error) Text("请输入有效的经纬度", color = MaterialTheme.colorScheme.error)
         }
     }, confirmButton = { TextButton({
         val latitude = lat.toDoubleOrNull()
         val longitude = lng.toDoubleOrNull()
         val point = if (latitude != null && longitude != null) GeoPoint(latitude, longitude) else null
         if (point?.valid == true) save(point) else error = true
-    }) { Text("保存并搜索附近") } }, dismissButton = { TextButton(dismiss) { Text("取消") } })
+    }) { Text("保存") } }, dismissButton = { TextButton(dismiss) { Text("取消") } })
 }

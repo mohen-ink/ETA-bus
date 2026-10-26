@@ -7,7 +7,7 @@ import java.io.DataOutputStream
 import java.io.IOException
 
 open class BusApiException(message: String, cause: Throwable? = null) : IOException(message, cause)
-class EmptyFrameException(val command: Int) : BusApiException("服务暂未返回有效数据，请稍后刷新（指令 $command）")
+class EmptyFrameException(val command: Int) : BusApiException("暂未获取到数据，请稍后刷新")
 class ServerMessageException(message: String) : BusApiException(message)
 class ProtocolException(message: String, cause: Throwable? = null) : BusApiException(message, cause)
 

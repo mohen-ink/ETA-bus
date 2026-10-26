@@ -52,7 +52,7 @@ internal fun MapScreen(state: BusUiState, model: BusViewModel, actions: UiAction
             PageBar("站点地图", actions.back)
             if (searchArea) Button({ dragged?.let { point -> actions.network { selected = null; mapCenter = point; model.setCenter(point) } } }, Modifier.align(Alignment.CenterHorizontally)) { Icon(Icons.Rounded.Search, null); Text("搜索此区域") }
             if (state.loading || state.refreshing) LinearProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = 16.dp))
-            if (!BuildConfig.AMAP_CONFIGURED || state.center == null) OutlinedButton(actions.manualCenter, Modifier.align(Alignment.CenterHorizontally)) { Text("手动设置查询中心") }
+            if (!BuildConfig.AMAP_CONFIGURED || state.center == null) OutlinedButton(actions.manualCenter, Modifier.align(Alignment.CenterHorizontally)) { Text("手动设置位置") }
             state.errors["nearby"]?.let { error -> Box(Modifier.padding(16.dp)) { StaleWarning(error, { actions.network { model.loadNearby() } }) } }
         }
         Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -69,7 +69,7 @@ internal fun MapScreen(state: BusUiState, model: BusViewModel, actions: UiAction
                 StaleWarning(state.errors[selectedPlatform.key], { actions.network { model.loadPlatform(selectedPlatform) } })
                 if (selectedPlatform.key in state.loadingKeys && records.isEmpty()) Skeleton(Modifier.fillMaxWidth().height(56.dp))
                 else if (nearest != null) RouteRow(nearest, { actions.route(nearest.selection(selectedPlatform)) })
-                else Text(if (state.arrivals.containsKey(selectedPlatform.key)) "暂无有效到站记录" else "暂未取得实时到站数据", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                else Text(if (state.arrivals.containsKey(selectedPlatform.key)) "暂无来车" else "暂无到站信息", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Button({
                     val group = state.nearby.firstOrNull { it.platforms.any { p -> p.key == selectedPlatform.key } }
                         ?: StationGroup(selectedPlatform.name, listOf(selectedPlatform))
@@ -83,14 +83,12 @@ internal fun MapScreen(state: BusUiState, model: BusViewModel, actions: UiAction
 @Composable
 internal fun StationScreen(state: BusUiState, model: BusViewModel, actions: UiActions) {
     val group = state.station
-    if (group == null) { Column { PageBar("站点详情", actions.back); StatusPanel("尚未选择站点", "请从附近、搜索或收藏打开站点") }; return }
+    if (group == null) { Column { PageBar("站点详情", actions.back); StatusPanel("尚未选择站点") }; return }
     val platform = state.platform
-    val scope = rememberCoroutineScope()
     val density = LocalDensity.current
     val screenHeight = LocalConfiguration.current.screenHeightDp.dp
-    var peekMode by rememberSaveable(group.key) { mutableIntStateOf(1) }
     var mapHeight by remember(group.key, screenHeight) { mutableStateOf(screenHeight * .45f) }
-    val peek = when (peekMode) { 0 -> 120.dp; 2 -> (screenHeight - 80.dp).coerceAtLeast(200.dp); else -> screenHeight * .55f }
+    val peek = screenHeight * .55f
     val sheetState = rememberStandardBottomSheetState(initialValue = SheetValue.PartiallyExpanded, skipHiddenState = true)
     val scaffold = rememberBottomSheetScaffoldState(bottomSheetState = sheetState)
     LaunchedEffect(sheetState, density) {
@@ -101,35 +99,31 @@ internal fun StationScreen(state: BusUiState, model: BusViewModel, actions: UiAc
         sheetShadowElevation = 0.dp, sheetTonalElevation = 0.dp, sheetShape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
         sheetContent = {
             Column(Modifier.fillMaxWidth().height((screenHeight - 80.dp).coerceAtLeast(200.dp))) {
-                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(group.name, Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
+                Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(group.name, style = MaterialTheme.typography.titleLarge)
+                        val distance = platform?.point?.let { state.center?.distanceTo(it) } ?: group.distanceMeters
+                        val info = listOfNotNull(distance?.let(::formatDistance), group.platforms.size.takeIf { it > 1 }?.let { "${it}个同名站台" })
+                        if (info.isNotEmpty()) Text(info.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    if (group.platforms.size > 1) OutlinedButton({ actions.network { model.switchPlatform() } }, contentPadding = PaddingValues(horizontal = 12.dp)) {
+                        Icon(Icons.Rounded.SwapHoriz, null, Modifier.size(18.dp)); Spacer(Modifier.width(4.dp)); Text("切换站台")
+                    }
                     IconButton({ model.favoriteStation(group) }) { Icon(if (model.isFavoriteStation(group)) Icons.Rounded.Star else Icons.Rounded.StarBorder, "收藏站点", tint = MaterialTheme.colorScheme.primary) }
                 }
-                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    val distance = platform?.point?.let { state.center?.distanceTo(it) } ?: group.distanceMeters
-                    Text(listOfNotNull(distance?.let(::formatDistance), "${group.platforms.size}个同名站台", "当前 ${(state.platformIndex + 1)}").joinToString(" · "), Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
-                }
-                Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    listOf("收起", "半屏", "展开").forEachIndexed { index, label -> TextButton({
-                        peekMode = index
-                        scope.launch { if (index == 2) sheetState.expand() else sheetState.partialExpand() }
-                    }) { Text(label, fontWeight = if (peekMode == index) FontWeight.Bold else FontWeight.Normal) } }
-                    Spacer(Modifier.weight(1f))
-                    if (group.platforms.size > 1) TextButton({ actions.network { model.switchPlatform() } }) { Icon(Icons.Rounded.SwapHoriz, null); Text("切换站台") }
-                }
                 PullToRefreshBox(isRefreshing = state.refreshing, onRefresh = { actions.network { platform?.let(model::loadPlatform) } }, modifier = Modifier.weight(1f)) {
-                    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         item { NoticeBanner(state.stationArrivals.mapNotNull { arrival -> arrival.exceptionMsg.takeIf(String::isNotBlank)?.let { "${normalizeRoute(arrival.routeName)}：$it" } }) }
                         item { StaleWarning(platform?.let { state.errors[it.key] }, { actions.network { platform?.let(model::loadPlatform) } }) }
                         if (platform?.key in state.loadingKeys && state.stationArrivals.isEmpty()) items(3) { Skeleton(Modifier.fillMaxWidth().height(70.dp)) }
-                        items(state.stationArrivals.distinctBy { it.key }, key = { it.key }) { arrival ->
+                        itemsIndexed(state.stationArrivals.distinctBy { it.key }, key = { _, it -> it.key }) { index, arrival ->
+                            if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outline)
                             val selection = platform?.let { arrival.selection(it) }
                             RouteRow(arrival, { selection?.let(actions.route) }, selection?.let(model::isFavoriteRoute), { selection?.let { model.favoriteRoute(it) } })
-                            HorizontalDivider(color = MaterialTheme.colorScheme.outline)
                         }
                         if (state.stationArrivals.isEmpty() && platform?.key !in state.loadingKeys) item {
                             val validEmpty = platform != null && state.arrivals.containsKey(platform.key) && !state.errors.containsKey(platform.key)
-                            StatusPanel(if (validEmpty) "暂无来车" else "暂无有效到站记录", if (validEmpty) "服务端已返回有效空列表" else "未取得有效实时数据时不会推断为无车", "重试", { actions.network { platform?.let(model::loadPlatform) } })
+                            StatusPanel(if (validEmpty) "暂无来车" else "暂无到站信息", if (validEmpty) "" else "下拉或点击重试", "重试", { actions.network { platform?.let(model::loadPlatform) } })
                         }
                     }
                 }
@@ -166,59 +160,78 @@ internal fun RouteScreen(state: BusUiState, model: BusViewModel, actions: UiActi
     val arrivalError = selection.platform?.let { state.errors[it.key] }
     val display = when {
         first != null -> EtaPresenter.present(first, detail)
-        arrivalError != null -> EtaDisplay("暂无数据", "实时到站未更新 · 请重试", EtaKind.IDLE)
-        selection.platform == null -> EtaDisplay("请选择等车站", "需有效站点坐标才能查询", EtaKind.IDLE)
-        state.arrivals[selection.platform.key]?.isEmpty() == true -> EtaDisplay("暂无来车", "服务端已返回有效空列表", EtaKind.IDLE)
-        else -> EtaDisplay("暂无数据", "未找到本线路与方向的有效到站记录", EtaKind.IDLE)
+        arrivalError != null -> EtaDisplay("暂无数据", "未更新 · 请重试", EtaKind.IDLE)
+        selection.platform == null -> EtaDisplay("请选择等车站", "", EtaKind.IDLE)
+        state.arrivals[selection.platform.key]?.isEmpty() == true -> EtaDisplay("暂无来车", "", EtaKind.IDLE)
+        else -> EtaDisplay("暂无数据", "", EtaKind.IDLE)
     }
+    val waitingName = selection.platform?.name ?: detail?.stations?.getOrNull(selection.stationIndex)
+    val alightingName = state.alightingIndex?.let { detail?.stations?.getOrNull(it) }
     Column(Modifier.fillMaxSize()) {
         PageBar(normalizeRoute(selection.routeName), actions.back) {
-            IconButton({ model.favoriteRoute(selection) }) { Icon(if (model.isFavoriteRoute(selection)) Icons.Rounded.Star else Icons.Rounded.StarBorder, "收藏线路和等车站", tint = MaterialTheme.colorScheme.primary) }
+            IconButton({ actions.network { model.reverseDirection() } }) { Icon(Icons.Rounded.SwapHoriz, "换向") }
+            IconButton({ model.favoriteRoute(selection) }) { Icon(if (model.isFavoriteRoute(selection)) Icons.Rounded.Star else Icons.Rounded.StarBorder, "收藏", tint = MaterialTheme.colorScheme.primary) }
         }
         PullToRefreshBox(isRefreshing = state.refreshing, onRefresh = { actions.network { model.loadRoute() } }, modifier = Modifier.weight(1f)) {
             LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 item {
-                    BusCard {
+                    Column(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             RouteBadge(selection.routeName, first?.routeColor.orEmpty())
-                            Text("${selection.fromStation.ifBlank { detail?.stations?.firstOrNull().orEmpty() }} → ${selection.toStation.ifBlank { detail?.stations?.lastOrNull().orEmpty() }}", Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+                            Text("开往 ${selection.toStation.ifBlank { detail?.stations?.lastOrNull().orEmpty() }}", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         }
-                        if (detail != null) {
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Surface(color = ArrivingGreen.copy(alpha = .12f), shape = RoundedCornerShape(50)) { Text("首 ${detail.beginTime.ifBlank { "未提供" }}", Modifier.padding(6.dp), color = ArrivingGreen, style = MaterialTheme.typography.bodySmall) }
-                                Surface(color = AlertOrange.copy(alpha = .12f), shape = RoundedCornerShape(50)) { Text("末 ${detail.endTime.ifBlank { "未提供" }}", Modifier.padding(6.dp), color = AlertOrange, style = MaterialTheme.typography.bodySmall) }
-                            }
-                            TextButton({ fare = true }, contentPadding = PaddingValues(0.dp)) { Text(detail.comments.ifBlank { "票价信息未提供" }, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis); Icon(Icons.Rounded.ChevronRight, "票价全文") }
+                        if (detail != null) Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable { fare = true }, verticalAlignment = Alignment.CenterVertically) {
+                            val info = listOfNotNull(
+                                detail.beginTime.takeIf(String::isNotBlank)?.let { "首 $it" },
+                                detail.endTime.takeIf(String::isNotBlank)?.let { "末 $it" },
+                                detail.comments.takeIf(String::isNotBlank)
+                            ).joinToString("  ")
+                            Text(info, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Icon(Icons.Rounded.ChevronRight, "首末班与票价", Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        Text("等车站：${selection.platform?.name ?: detail?.stations?.getOrNull(selection.stationIndex) ?: "请选择"}", color = MaterialTheme.colorScheme.primary)
-                        if (state.detailCached) Text("静态缓存 · 正在尝试更新", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        StaleWarning(state.errors["route"], { actions.network { model.loadRoute() } })
-                        StaleWarning(arrivalError, { actions.network { selection.platform?.let(model::loadPlatform) } })
                     }
                 }
-                if (state.loading && detail == null) item { LoadingCards() }
+                item {
+                    StaleWarning(state.errors["route"], { actions.network { model.loadRoute() } })
+                    StaleWarning(arrivalError, { actions.network { selection.platform?.let(model::loadPlatform) } })
+                }
+                item { NoticeBanner(filtered.mapNotNull { it.exceptionMsg.takeIf(String::isNotBlank) }) }
                 item {
                     BusCard {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                            Column { Text("第一辆", style = MaterialTheme.typography.bodySmall); EtaText(display) }
-                            Column(Modifier.widthIn(max = 150.dp), horizontalAlignment = Alignment.End) {
-                                Text("第二辆车", style = MaterialTheme.typography.bodySmall)
-                                Text("暂不估算", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.titleMedium)
-                                Text("车辆站序与 ETA 尚未验证", style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.End, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable(enabled = detail != null) { chooser = "waiting" }, verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Rounded.Place, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
+                            Text(waitingName ?: "选择等车站", Modifier.weight(1f).padding(start = 6.dp), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                            Text("切换", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Icon(Icons.Rounded.ChevronRight, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        val second = if (display.live) EtaPresenter.secondBus(detail, selection.stationIndex, first) else null
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+                            Column(Modifier.weight(1f)) {
+                                Text("第一辆", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                EtaText(display, alignment = Alignment.Start)
+                            }
+                            if (second != null) {
+                                Box(Modifier.width(1.dp).height(48.dp).background(MaterialTheme.colorScheme.outline).align(Alignment.CenterVertically))
+                                Column(Modifier.weight(1f).padding(start = 16.dp)) {
+                                    Text("第二辆", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    EtaText(second, alignment = Alignment.Start)
+                                }
                             }
                         }
-                        if (detail != null && detail.buses.isNotEmpty()) Text("接口返回 ${detail.buses.size} 辆在途车辆；仅展示实际车辆，不推算第二辆到站时间。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        if (state.loading && detail == null) Skeleton(Modifier.fillMaxWidth().height(200.dp))
                         if (detail != null) StationStrip(detail, selection.stationIndex, state.alightingIndex, first?.routeColor.orEmpty(), { actions.network { model.chooseWaitingStation(it) } })
-                        OutlinedButton({ actions.network { model.reverseDirection() } }, Modifier.align(Alignment.CenterHorizontally)) { Icon(Icons.Rounded.SwapHoriz, null); Text("换向 · 请求另一方向") }
+                        if (detail != null && selection.stationIndex >= 0) Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable { chooser = "alighting" }, verticalAlignment = Alignment.CenterVertically) {
+                            Text(if (alightingName == null) "选择下车站" else "到 $alightingName · 共 ${state.alightingIndex!! - selection.stationIndex} 站", Modifier.weight(1f),
+                                style = MaterialTheme.typography.bodyMedium, color = if (alightingName == null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary)
+                            Icon(Icons.Rounded.ChevronRight, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                     }
                 }
-                item { NoticeBanner(state.routeArrivals.mapNotNull { it.exceptionMsg.takeIf(String::isNotBlank)?.let { msg -> "${normalizeRoute(it.routeName)}：$msg" } }) }
                 item {
                     BusCard {
                         Row(Modifier.fillMaxWidth().clickable { mapExpanded = !mapExpanded }, verticalAlignment = Alignment.CenterVertically) {
                             Text("线路地图", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
-                            Text(if (mapExpanded) "收起" else "展开", color = MaterialTheme.colorScheme.primary)
-                            Icon(if (mapExpanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore, null)
+                            Icon(if (mapExpanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore, if (mapExpanded) "收起" else "展开", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         if (mapExpanded) {
                             val platforms = detail?.stations.orEmpty().mapIndexedNotNull { index, name -> detail?.stationPoints?.getOrNull(index)?.let { Platform(name, it) } }
@@ -226,35 +239,32 @@ internal fun RouteScreen(state: BusUiState, model: BusViewModel, actions: UiActi
                                 selection.platform?.point ?: detail?.stationPoints?.firstOrNull { it != null }, platforms = platforms,
                                 selected = selection.platform, userPoint = state.userPoint, routePoints = detail?.stationPoints.orEmpty().filterNotNull(), buses = detail?.buses.orEmpty(),
                                 onPlatformClick = { p -> detail?.stations?.indices?.firstOrNull { index -> detail.stations[index] == p.name && detail.stationPoints.getOrNull(index) == p.point }?.let { index -> actions.network { model.chooseWaitingStation(index) } } })
-                            if (platforms.isEmpty()) Text("本线路未提供真实站点坐标，不绘制猜测路线。", style = MaterialTheme.typography.bodySmall)
+                            if (platforms.isEmpty()) Text("暂无线路地图", style = MaterialTheme.typography.bodySmall)
                         }
                     }
                 }
-                item {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton({ chooser = "waiting" }, Modifier.weight(1f)) { Text("等车站 ${selection.platform?.name ?: "选择"}", maxLines = 1, overflow = TextOverflow.Ellipsis) }
-                        OutlinedButton({ chooser = "alighting" }, Modifier.weight(1f), enabled = detail != null && selection.stationIndex >= 0) { Text("下车站 ${state.alightingIndex?.let { detail?.stations?.getOrNull(it) } ?: "选择"}", maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                val sameStation = state.routeArrivals.filterNot { normalizeRoute(it.routeName) == normalizeRoute(selection.routeName) && it.direction == selection.direction }
+                if (sameStation.isNotEmpty()) item {
+                    BusCard {
+                        Text("${waitingName.orEmpty()} 其他线路", style = MaterialTheme.typography.titleMedium)
+                        sameStation.forEachIndexed { index, arrival ->
+                            if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outline)
+                            val route = selection.platform?.let { arrival.selection(it) }
+                            RouteRow(arrival, { route?.let(actions.route) })
+                        }
                     }
-                    state.alightingIndex?.let { end -> Text("共 ${end - selection.stationIndex} 站", color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(8.dp)) }
                 }
-                item { Text("同站线路", style = MaterialTheme.typography.titleMedium) }
-                val sameStation = state.routeArrivals.sortedBy { if (normalizeRoute(it.routeName) == normalizeRoute(selection.routeName) && it.direction == selection.direction) 0 else 1 }
-                items(sameStation, key = { it.key }) { arrival ->
-                    val route = selection.platform?.let { arrival.selection(it) }
-                    BusCard { RouteRow(arrival, { route?.let(actions.route) }, route?.let(model::isFavoriteRoute), { route?.let { model.favoriteRoute(it) } }, normalizeRoute(arrival.routeName) == normalizeRoute(selection.routeName) && arrival.direction == selection.direction) }
-                }
-                if (sameStation.isEmpty()) item { Text("${if (selection.platform == null) "请选择带坐标的等车站" else "暂无同站线路数据"}", color = MaterialTheme.colorScheme.onSurfaceVariant) }
             }
         }
     }
-    if (fare && detail != null) AlertDialog(onDismissRequest = { fare = false }, title = { Text("首末班与票价") }, text = { Column(Modifier.verticalScroll(rememberScrollState())) { Text("首班 ${detail.beginTime}\n末班 ${detail.endTime}\n\n${detail.comments.ifBlank { "服务端未提供票价信息" }}") } }, confirmButton = { TextButton({ fare = false }) { Text("知道了") } })
+    if (fare && detail != null) AlertDialog(onDismissRequest = { fare = false }, title = { Text("首末班与票价") }, text = { Column(Modifier.verticalScroll(rememberScrollState())) { Text("首班 ${detail.beginTime}\n末班 ${detail.endTime}\n\n${detail.comments.ifBlank { "暂无票价信息" }}") } }, confirmButton = { TextButton({ fare = false }) { Text("知道了") } })
     if (chooser != null && detail != null) {
         val alighting = chooser == "alighting"
         val indices = detail.stations.indices.filter { !alighting || it > selection.stationIndex }
         AlertDialog(onDismissRequest = { chooser = null }, title = { Text(if (alighting) "选择下车站" else "选择等车站") }, text = {
             LazyColumn(Modifier.heightIn(max = 420.dp)) {
                 if (alighting) item { TextButton({ model.chooseAlightingStation(null); chooser = null }) { Text("清除下车站") } }
-                items(indices) { index -> ListItem(headlineContent = { Text("${index + 1}  ${detail.stations[index]}") }, supportingContent = { if (!alighting && detail.stationPoints.getOrNull(index) == null) Text("坐标缺失，无法查询实时到站") }, modifier = Modifier.clickable {
+                items(indices) { index -> ListItem(headlineContent = { Text("${index + 1}  ${detail.stations[index]}") }, supportingContent = { if (!alighting && detail.stationPoints.getOrNull(index) == null) Text("该站暂不支持实时查询") }, modifier = Modifier.clickable {
                     chooser = null
                     if (alighting) model.chooseAlightingStation(index) else actions.network { model.chooseWaitingStation(index) }
                 }) }
@@ -270,28 +280,23 @@ fun StationStrip(detail: RouteDetail, waitingIndex: Int, alightingIndex: Int?, e
     val color = routeColor(detail.routeName, explicitColor)
     val primary = MaterialTheme.colorScheme.primary
     val outline = MaterialTheme.colorScheme.surface
-    val alert = AlertOrange
     val transition = rememberInfiniteTransition(label = "waitingStation")
     val pulse by transition.animateFloat(0f, 1f, infiniteRepeatable(tween(1500)), label = "stationPulse")
-    val namedVehicles = detail.buses.filter { bus -> bus.stationName.isNotBlank() && detail.stations.count { it == bus.stationName } == 1 }
-    val passed = namedVehicles.map { detail.stations.indexOf(it.stationName) }.filter { it >= 0 }.minOrNull() ?: -1
+    val vehiclesOnRoute = detail.buses.filter { it.index in detail.stations.indices }
+    val passed = vehiclesOnRoute.minOfOrNull { if (it.approaching) it.index - 1 else it.index } ?: -1
     LaunchedEffect(waitingIndex, detail.stations) { if (waitingIndex in detail.stations.indices) list.animateScrollToItem(waitingIndex) }
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         val side = ((maxWidth - 72.dp) / 2).coerceAtLeast(0.dp)
         LazyRow(state = list, contentPadding = PaddingValues(horizontal = side), modifier = Modifier.fillMaxWidth().heightIn(min = 245.dp, max = 350.dp)) {
             itemsIndexed(detail.stations) { index, name ->
-                val vehicles = namedVehicles.filter { it.stationName == name }
+                val atStation = vehiclesOnRoute.filter { it.index == index && !it.approaching }
+                val approaching = vehiclesOnRoute.filter { it.index == index && it.approaching }
                 val waiting = index == waitingIndex
                 val highlighted = alightingIndex != null && index >= waitingIndex && index <= alightingIndex
                 Column(Modifier.width(72.dp).clickable { onStationClick(index) }.semantics { contentDescription = "第${index + 1}站 $name${if (waiting) "，当前等车站" else "，点击设为等车站"}" }, horizontalAlignment = Alignment.CenterHorizontally) {
                     Box(Modifier.height(45.dp).fillMaxWidth(), contentAlignment = Alignment.BottomCenter) {
-                        if (vehicles.isNotEmpty()) Surface(shape = RoundedCornerShape(8.dp), color = color,
-                            border = if (vehicles.any { it.statusType == "2" }) BorderStroke(2.dp, alert) else null) {
-                            Row(Modifier.padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Rounded.DirectionsBus, "${vehicles.size}辆车${if (vehicles.any { it.statusType == "2" }) "，拥堵" else ""}", Modifier.size(20.dp), tint = Color.White)
-                                if (vehicles.size > 1) Text(vehicles.size.toString(), color = Color.White, fontSize = 11.sp)
-                            }
-                        }
+                        if (atStation.isNotEmpty()) VehicleBadge(atStation.size, color, "${atStation.size}辆车已到站")
+                        if (approaching.isNotEmpty()) VehicleBadge(approaching.size, color, "${approaching.size}辆车即将到达", Modifier.offset(x = (-36).dp))
                     }
                     Canvas(Modifier.fillMaxWidth().height(38.dp)) {
                         val y = size.height / 2
@@ -314,5 +319,14 @@ fun StationStrip(detail: RouteDetail, waitingIndex: Int, alightingIndex: Int?, e
             }
         }
     }
-    if (detail.buses.isNotEmpty()) Text("车辆仅按唯一同名站映射；站序基准待运营样本验证。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+}
+
+@Composable
+private fun VehicleBadge(count: Int, color: Color, description: String, modifier: Modifier = Modifier) {
+    Surface(modifier, shape = RoundedCornerShape(8.dp), color = color) {
+        Row(Modifier.padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Rounded.DirectionsBus, description, Modifier.size(20.dp), tint = Color.White)
+            if (count > 1) Text(count.toString(), color = Color.White, fontSize = 11.sp)
+        }
+    }
 }

@@ -48,10 +48,11 @@ internal fun SavedSummary(item: SavedItem, onClick: () -> Unit) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             if (route != null) RouteBadge(route.routeName) else Icon(Icons.Rounded.Signpost, null, tint = MaterialTheme.colorScheme.primary)
             Column(Modifier.weight(1f)) {
-                Text(route?.let { "→ ${it.toStation.ifBlank { "方向 ${it.direction}" }}" } ?: item.station?.name.orEmpty(), style = MaterialTheme.typography.titleMedium)
-                Text(route?.let { "等车站 ${it.platform?.name ?: "未选择"}" } ?: "${item.station?.platforms?.maxOfOrNull { it.routeCount } ?: 0}条线路 · ${item.station?.platforms?.size ?: 0}个站台", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(route?.let { "开往 ${it.toStation.ifBlank { if (it.direction == "1") "上行" else "下行" }}" } ?: item.station?.name.orEmpty(), style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                val sub = route?.let { r -> r.platform?.name?.let { "$it 上车" } } ?: item.station?.platforms?.maxOfOrNull { it.routeCount }?.takeIf { it > 0 }?.let { "${it}条线路" }
+                if (sub != null) Text(sub, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Icon(Icons.Rounded.ChevronRight, "查看详情")
+            Icon(Icons.Rounded.ChevronRight, "查看详情", tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -111,9 +112,9 @@ internal fun FavoritesScreen(state: BusUiState, model: BusViewModel, actions: Ui
                 }
             }
         }
-        if (!state.settings.privacyAccepted) TextButton({ actions.network { model.refreshFavorites() } }, Modifier.fillMaxWidth()) { Text("本地收藏可浏览 · 同意隐私后刷新实时数据") }
+        if (!state.settings.privacyAccepted && state.favorites.isNotEmpty()) TextButton({ actions.network { model.refreshFavorites() } }, Modifier.fillMaxWidth()) { Text("同意隐私说明后可查看实时到站") }
         LazyColumn(state = list, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            if (rows.isEmpty()) item { StatusPanel("还没有收藏${if (stationTab) "站点" else "线路"}", "点击线路或站点旁的 ☆ 即可收藏") }
+            if (rows.isEmpty()) item { StatusPanel("还没有收藏${if (stationTab) "站点" else "线路"}", "在${if (stationTab) "站点" else "线路"}详情页点击右上角星标即可收藏") }
             items(rows, key = { "fav:${it.id}" }) { item ->
                 val rowModifier = Modifier.graphicsLayer { if (dragging == item.id) { translationY = dragY; alpha = .85f } }
                 val open = {
@@ -131,7 +132,10 @@ internal fun FavoritesScreen(state: BusUiState, model: BusViewModel, actions: Ui
                                         val arrivals = route.platform?.let { state.arrivals[it.key] }.orEmpty()
                                         val arrival = nearestArrival(arrivals.filter { normalizeRoute(it.routeName) == normalizeRoute(route.routeName) && it.direction == route.direction })
                                         RouteBadge(route.routeName, arrival?.routeColor.orEmpty())
-                                        Column { Text("→ ${route.toStation.ifBlank { "方向 ${route.direction}" }}"); Text("等车站 ${route.platform?.name ?: "未选择"}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                                        Column {
+                                            Text("开往 ${route.toStation.ifBlank { if (route.direction == "1") "上行" else "下行" }}", maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                                            route.platform?.name?.let { Text("$it 上车", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                                        }
                                     }
                                 } else {
                                     Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Rounded.Signpost, null, tint = MaterialTheme.colorScheme.primary); Text(item.station?.name.orEmpty(), Modifier.padding(start = 8.dp), style = MaterialTheme.typography.titleMedium) }
@@ -172,7 +176,7 @@ internal fun FavoritesScreen(state: BusUiState, model: BusViewModel, actions: Ui
                             val route = item.route
                             val records = platforms.flatMap { state.arrivals[it.key].orEmpty() }
                             val arrival = nearestArrival(records.filter { normalizeRoute(it.routeName) == normalizeRoute(route.routeName) && it.direction == route.direction })
-                            val eta = if (arrival != null) com.mohen.etabus.domain.EtaPresenter.present(arrival) else EtaDisplay("暂无数据", if (platforms.any { state.errors.containsKey(it.key) }) "未更新 · 请重试" else "暂无有效到站记录", EtaKind.IDLE)
+                            val eta = if (arrival != null) com.mohen.etabus.domain.EtaPresenter.present(arrival) else EtaDisplay("暂无数据", if (platforms.any { state.errors.containsKey(it.key) }) "未更新 · 请重试" else "暂无来车", EtaKind.IDLE)
                             EtaText(eta, Modifier.align(Alignment.End).clickable(onClick = open))
                         } else platforms.firstOrNull()?.let { p ->
                             state.arrivals[p.key].orEmpty().take(3).forEach { arrival -> RouteRow(arrival, { actions.route(arrival.selection(p)) }) }
@@ -202,33 +206,33 @@ internal fun SettingsScreen(state: BusUiState, model: BusViewModel, actions: UiA
         item {
             SettingsGroup("常规") {
                 SettingRow("当前城市", state.city.displayName, { actions.navigate("cities") })
-                SettingRow("附近搜索半径", "${state.settings.radius} 米", { options = "radius" })
-                SettingRow("查询中心", state.center?.let { "%.5f, %.5f".format(it.lat, it.lng) } ?: "尚未设置", actions.manualCenter)
-                SettingRow("隐私与数据使用", if (state.settings.privacyAccepted) "已同意 · 查看说明" else "尚未同意 · 可重新同意", actions.privacy)
+                SettingRow("附近范围", "${state.settings.radius} 米", { options = "radius" })
+                SettingRow("自动刷新", if (state.settings.refreshSeconds == 0) "关闭" else "每 ${state.settings.refreshSeconds} 秒", { options = "refresh" })
+                SettingRow("手动设置位置", if (state.center == null) "未设置" else "", actions.manualCenter)
             }
         }
-        item { SettingsGroup("刷新") { SettingRow("自动刷新间隔", if (state.settings.refreshSeconds == 0) "关闭" else "${state.settings.refreshSeconds} 秒", { options = "refresh" }) } }
         item {
             SettingsGroup("外观") {
                 SettingRow("深色模式", when (state.settings.theme) { ThemeMode.SYSTEM -> "跟随系统"; ThemeMode.LIGHT -> "浅色"; ThemeMode.DARK -> "深色" }, { options = "theme" })
-                SettingRow("到站数字字体", if (state.settings.digitFont == DigitFont.MONO) "等宽" else "点阵（本地绘制）", { options = "font" })
+                SettingRow("到站数字样式", if (state.settings.digitFont == DigitFont.MONO) "等宽" else "点阵", { options = "font" })
             }
         }
         item {
             SettingsGroup("数据") {
-                SettingRow("清除历史记录", "当前城市 · ${state.history.size} 条", { clear = "history" })
-                SettingRow("清除收藏", "当前城市 · ${state.favorites.size} 条", { clear = "favorites" })
-                SettingRow("清除搜索历史", "最多保留 10 条", { clear = "search" })
+                SettingRow("清除浏览历史", "${state.history.size} 条", { clear = "history" })
+                SettingRow("清除收藏", "${state.favorites.size} 条", { clear = "favorites" })
+                SettingRow("清除搜索记录", "", { clear = "search" })
             }
         }
         item {
             SettingsGroup("关于") {
-                SettingRow("版本号", version, {})
-                SettingRow("数据来源说明", "掌上公交 · 高德地图", { source = true })
-                SettingRow("开源许可证", "第三方组件及数字字形", { actions.navigate("license") })
+                SettingRow("隐私说明", if (state.settings.privacyAccepted) "" else "未同意", actions.privacy)
+                SettingRow("数据来源", "", { source = true })
+                SettingRow("开源许可", "", { actions.navigate("license") })
+                SettingRow("版本", version, null)
             }
         }
-        item { Text("秒查公交只做公交查询。到站信息以服务端及实际运营为准；坐标暂按 GCJ-02 处理，第二辆车 ETA 暂不估算。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 12.dp)) }
+        item { Text("到站信息仅供参考，请以实际运营为准。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 12.dp)) }
     }
     val option = options
     if (option != null) {
@@ -236,7 +240,7 @@ internal fun SettingsScreen(state: BusUiState, model: BusViewModel, actions: UiA
             "radius" -> listOf("500 米", "1000 米", "3000 米")
             "refresh" -> listOf("15 秒", "30 秒", "60 秒", "关闭")
             "theme" -> listOf("跟随系统", "浅色", "深色")
-            else -> listOf("等宽数字", "点阵数字（Canvas 本地绘制）")
+            else -> listOf("等宽数字", "点阵数字")
         }
         val chosen = when (option) {
             "radius" -> listOf(500, 1000, 3000).indexOf(state.settings.radius)
@@ -263,25 +267,25 @@ internal fun SettingsScreen(state: BusUiState, model: BusViewModel, actions: UiA
     })
     if (source) AlertDialog(onDismissRequest = { source = false }, title = { Text("数据来源说明") }, text = {
         Column(Modifier.verticalScroll(rememberScrollState())) {
-            Text("公交数据：掌上公交各城市服务端。城市配置来自打包城市目录，配置完整不代表每个城市均已验证。\n\n地图与定位：高德地图，须配置有效 Key 并取得隐私同意。暂按 GCJ-02 坐标接入，尚需实地对齐验证。\n\n实时到站：采用站点 149 与线路 145 的真实返回；失败和零长空帧不当作无车，不推算未验证的第二辆车 ETA。\n\n本地存储：设置、查询历史及收藏保存在设备；历史与收藏按城市隔离。")
+            Text("公交数据：掌上公交。各城市数据覆盖情况以实际查询结果为准。\n\n地图与定位：高德地图。\n\n实时到站：第一辆车为公交平台实时预测；第二辆车根据车辆实时位置估算，仅供参考。\n\n本地存储：设置、浏览历史和收藏仅保存在本机，按城市分别保存。")
         }
     }, confirmButton = { TextButton({ source = false }) { Text("知道了") } })
 }
 
 @Composable
 private fun SettingsGroup(title: String, content: @Composable ColumnScope.() -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(title, Modifier.padding(horizontal = 4.dp), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.titleMedium)
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(title, Modifier.padding(horizontal = 4.dp), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
         BusCard { content() }
     }
 }
 
 @Composable
-private fun SettingRow(title: String, value: String, onClick: () -> Unit) {
-    Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
+private fun SettingRow(title: String, value: String, onClick: (() -> Unit)?) {
+    Row(Modifier.fillMaxWidth().then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier).padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(title, Modifier.weight(1f))
         Text(value, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Icon(Icons.Rounded.ChevronRight, null, Modifier.size(18.dp))
+        if (onClick != null) Icon(Icons.Rounded.ChevronRight, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -302,12 +306,12 @@ internal fun LicenseScreen(back: () -> Unit, network: (() -> Unit) -> Unit) {
             items(listOf("AndroidX / Jetpack Compose / Material / Navigation / Lifecycle" to "The Android Open Source Project · Apache License 2.0", "Kotlin / kotlinx.coroutines" to "JetBrains s.r.o. and contributors · Apache License 2.0", "Hilt / Dagger" to "Google, Inc. and contributors · Apache License 2.0", "OkHttp" to "Square, Inc. and contributors · Apache License 2.0")) { (name, attribution) ->
                 BusCard { Text(name, style = MaterialTheme.typography.titleMedium); Text(attribution, style = MaterialTheme.typography.bodySmall); TextButton({ license = "Apache License 2.0" }) { Text("查看许可与官方原文") } }
             }
-            item { BusCard { Text("到站数字字形", style = MaterialTheme.typography.titleMedium); Text("等宽模式使用系统字体；点阵模式由本应用通过 Canvas 绘制 5×7 数字，不捆绑 Doto 或其他字体文件。", style = MaterialTheme.typography.bodyMedium) } }
+            item { BusCard { Text("到站数字字形", style = MaterialTheme.typography.titleMedium); Text("等宽模式使用系统字体；点阵模式为本应用自绘的 5×7 点阵数字。", style = MaterialTheme.typography.bodyMedium) } }
             item { BusCard { Text("高德地图与定位", style = MaterialTheme.typography.titleMedium); Text("高德 SDK 不属于上述开源组件，使用须遵循高德开放平台服务协议与隐私政策。", style = MaterialTheme.typography.bodySmall); TextButton({ openUrl("https://lbs.amap.com/pages/terms/") }) { Text("高德服务协议") } } }
         }
     }
     if (license != null) AlertDialog(onDismissRequest = { license = null }, title = { Text(license.orEmpty()) }, text = { Column(Modifier.verticalScroll(rememberScrollState())) {
-        Text("Apache License\nVersion 2.0, January 2004\n\nLicensed under the Apache License, Version 2.0 (the \"License\"); you may not use this file except in compliance with the License. You may obtain a copy of the License at\n\nhttps://www.apache.org/licenses/LICENSE-2.0\n\nUnless required by applicable law or agreed to in writing, software distributed under the License is distributed on an \"AS IS\" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.\n\n此处为组件许可声明，完整条款请查看官方原文。")
+        Text("Apache License\nVersion 2.0, January 2004\n\nLicensed under the Apache License, Version 2.0 (the \"License\"); you may not use this file except in compliance with the License. You may obtain a copy of the License at\n\nhttps://www.apache.org/licenses/LICENSE-2.0\n\nUnless required by applicable law or agreed to in writing, software distributed under the License is distributed on an \"AS IS\" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.")
     } }, confirmButton = { TextButton({ openUrl("https://www.apache.org/licenses/LICENSE-2.0") }) { Text("打开官方全文") } }, dismissButton = { TextButton({ license = null }) { Text("关闭") } })
     if (failure != null) AlertDialog(onDismissRequest = { failure = null }, title = { Text("链接打开失败") }, text = { Text(failure.orEmpty()) }, confirmButton = { TextButton({ failure = null }) { Text("知道了") } })
 }

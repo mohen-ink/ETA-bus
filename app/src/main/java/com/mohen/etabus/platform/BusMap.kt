@@ -62,9 +62,9 @@ fun BusMap(
         ?: routePoints.firstOrNull { it.valid }
         ?: buses.firstNotNullOfOrNull { it.point?.takeIf(GeoPoint::valid) }
     val unavailable = when {
-        !BuildConfig.AMAP_CONFIGURED -> "尚未配置高德地图 Key，地图暂不可用。你仍可搜索线路、查看到站与收藏。"
-        !consented -> "同意隐私说明后才能加载高德地图；未同意时不会初始化地图 SDK。"
-        initialPoint == null -> "暂无可用的地图坐标，请先定位或选择带坐标的站点。"
+        !BuildConfig.AMAP_CONFIGURED -> "地图暂不可用，仍可搜索线路和查看到站。"
+        !consented -> "同意隐私说明后即可查看地图。"
+        initialPoint == null -> "请先定位或选择站点。"
         else -> null
     }
     if (unavailable != null) {
@@ -76,7 +76,7 @@ fun BusMap(
     val creation = remember(context, lifecycleOwner) { runCatching { MapSession.create(context) } }
     val session = creation.getOrNull()
     if (session == null) {
-        MapPlaceholder(modifier, "高德地图初始化失败，请检查应用地图配置并重新进入页面。")
+        MapPlaceholder(modifier, "地图加载失败，请稍后重新进入。")
         return
     }
     var failure by remember(session) { mutableStateOf<String?>(null) }
@@ -92,7 +92,7 @@ fun BusMap(
                 }
             }.onFailure {
                 session.destroy()
-                failure = "地图生命周期处理失败，请重新进入页面。"
+                failure = "地图加载失败，请稍后重新进入。"
             }
         }
         lifecycle.addObserver(observer)
@@ -111,7 +111,7 @@ fun BusMap(
             modifier = modifier.onSizeChanged { size ->
                 runCatching { session.resize(size.width, size.height) }.onFailure {
                     session.destroy()
-                    failure = "地图显示区域更新失败，请重新进入页面。"
+                    failure = "地图加载失败，请稍后重新进入。"
                 }
             },
             update = {
@@ -119,7 +119,7 @@ fun BusMap(
                     session.update(center, platforms, selected, userPoint, routePoints, buses, onPlatformClick, onCenterChanged)
                 }.onFailure {
                     session.destroy()
-                    failure = "地图数据更新失败，请重新进入页面。"
+                    failure = "地图加载失败，请稍后重新进入。"
                 }
             }
         )
@@ -234,8 +234,8 @@ private class MapSession private constructor(val view: MapView, private val dens
             val point = bus.point?.takeIf { it.valid } ?: return@forEach
             map.addMarker(
                 MarkerOptions().position(point.latLng()).title(bus.busNumber.ifBlank { "公交车辆" })
-                    .snippet(if (bus.statusType == "2") "拥堵" else "实时车辆位置")
-                    .icon(icon(if (bus.statusType == "2") "congested" else "bus")).anchor(0.5f, 0.5f).zIndex(7f)
+                    .snippet(if (bus.approaching) "开往${bus.stationName}" else "到达${bus.stationName}")
+                    .icon(icon("bus")).anchor(0.5f, 0.5f).zIndex(7f)
             )
         }
     }

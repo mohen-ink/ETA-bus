@@ -93,9 +93,9 @@ private fun LedTitle(text: String, color: Color) {
 }
 
 @Composable
-fun EtaText(display: EtaDisplay, modifier: Modifier = Modifier) {
+fun EtaText(display: EtaDisplay, modifier: Modifier = Modifier, alignment: Alignment.Horizontal = Alignment.End) {
     val color = when (display.kind) { EtaKind.LIVE -> LiveAmber; EtaKind.ARRIVING -> ArrivingGreen; EtaKind.ALERT -> AlertOrange; EtaKind.IDLE -> MaterialTheme.colorScheme.onSurfaceVariant }
-    Column(modifier, horizontalAlignment = Alignment.End) {
+    Column(modifier, horizontalAlignment = alignment) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (display.live) LivePulse(true, color = color)
             AnimatedContent(display.title, transitionSpec = {
@@ -103,8 +103,8 @@ fun EtaText(display: EtaDisplay, modifier: Modifier = Modifier) {
                     (slideOutVertically(tween(250)) { -it } + fadeOut(tween(250)))
             }, label = "etaFlip") { LedTitle(it, color) }
         }
-        if (display.subtitle.isNotBlank()) Text(display.subtitle, fontSize = 13.sp, color = color,
-            textAlign = TextAlign.End, fontFamily = FontFamily.Monospace, style = TextStyle(fontFeatureSettings = "tnum"))
+        if (display.subtitle.isNotBlank()) Text(display.subtitle, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = if (alignment == Alignment.Start) TextAlign.Start else TextAlign.End, style = TextStyle(fontFeatureSettings = "tnum"))
     }
 }
 
@@ -180,16 +180,12 @@ internal fun nearestArrival(arrivals: List<Arrival>): Arrival? = arrivals.minWit
 
 @Composable
 internal fun RouteRow(arrival: Arrival, onClick: () -> Unit, favorite: Boolean? = null, onFavorite: () -> Unit = {}, current: Boolean = false) {
-    Column(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 9.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            RouteBadge(arrival.routeName, arrival.routeColor)
-            Column(Modifier.weight(1f)) {
-                if (current) Text("当前线路", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall)
-                Text("→ ${arrival.toStation.ifBlank { "方向 ${arrival.direction}" }}", maxLines = 2, style = MaterialTheme.typography.bodySmall)
-            }
-            if (favorite != null) IconButton(onFavorite, Modifier.size(40.dp)) { Icon(if (favorite) Icons.Rounded.Star else Icons.Rounded.StarBorder, "收藏线路", tint = MaterialTheme.colorScheme.primary) }
-        }
-        EtaText(EtaPresenter.present(arrival), Modifier.align(Alignment.End))
+    Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        RouteBadge(arrival.routeName, arrival.routeColor)
+        Text("开往 ${arrival.toStation.ifBlank { if (arrival.direction == "1") "上行" else "下行" }}", Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis,
+            style = MaterialTheme.typography.bodyMedium, color = if (current) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
+        EtaText(EtaPresenter.present(arrival))
+        if (favorite != null) IconButton(onFavorite, Modifier.size(36.dp)) { Icon(if (favorite) Icons.Rounded.Star else Icons.Rounded.StarBorder, "收藏线路", tint = MaterialTheme.colorScheme.primary) }
     }
 }
 
@@ -199,29 +195,27 @@ internal fun StationCard(group: StationGroup, arrivals: List<Arrival>, expanded:
     onRoute: (Arrival, Platform) -> Unit, onRetry: () -> Unit) {
     BusCard {
         Row(Modifier.fillMaxWidth().clickable(onClick = onOpen), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Rounded.Signpost, null, tint = MaterialTheme.colorScheme.primary)
-            Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
-                Text(group.name, style = MaterialTheme.typography.titleMedium)
-                Text(listOfNotNull(group.distanceMeters?.let(::formatDistance), "${group.platforms.size}个站台").joinToString(" · "), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
-            }
-            Icon(Icons.Rounded.ChevronRight, "站点详情")
+            Text(group.name, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            group.distanceMeters?.let { Text(formatDistance(it), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
+            Icon(Icons.Rounded.ChevronRight, "站点详情", tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        if (expanded || autoPreview) {
+        val open = expanded || autoPreview
+        if (open) {
             StaleWarning(error, onRetry)
-            if (loading && arrivals.isEmpty()) repeat(3) { Skeleton(Modifier.fillMaxWidth().height(50.dp)) }
+            if (loading && arrivals.isEmpty()) repeat(2) { Skeleton(Modifier.fillMaxWidth().height(44.dp)) }
             else {
                 val rows = if (expanded) arrivals else arrivals.take(3)
-                rows.forEach { arrival ->
+                rows.forEachIndexed { index, arrival ->
+                    if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outline)
                     val platform = group.platforms.firstOrNull { p -> p.point == arrival.point } ?: group.platforms.firstOrNull()
                     RouteRow(arrival, { if (platform != null) onRoute(arrival, platform) })
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outline)
                 }
-                if (arrivals.isEmpty() && !loading) Text(if (error == null) "暂无有效到站记录" else "暂未取得实时数据", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (arrivals.isEmpty() && !loading && error == null) Text("暂无来车", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
             }
         }
-        TextButton(onToggle, Modifier.align(Alignment.CenterHorizontally)) {
-            Text(if (expanded) "收起" else "展开全部")
-            Icon(if (expanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore, null)
+        if (!open || expanded || arrivals.size > 3) TextButton(onToggle, Modifier.align(Alignment.CenterHorizontally).height(36.dp), contentPadding = PaddingValues(horizontal = 12.dp)) {
+            Text(when { expanded -> "收起"; open -> "查看全部 ${arrivals.size} 条"; else -> "查看到站" }, style = MaterialTheme.typography.bodySmall)
+            Icon(if (expanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore, null, Modifier.size(18.dp))
         }
     }
 }

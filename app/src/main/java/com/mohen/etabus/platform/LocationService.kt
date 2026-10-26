@@ -29,7 +29,7 @@ class LocationService @Inject constructor(@ApplicationContext context: Context) 
     private val mutex = Mutex()
 
     suspend fun locate(consented: Boolean): LocatedPoint {
-        check(BuildConfig.AMAP_CONFIGURED) { "尚未配置高德地图 Key，暂时无法定位；仍可手动选择城市和搜索线路" }
+        check(BuildConfig.AMAP_CONFIGURED) { "暂时无法定位，可手动设置位置或直接搜索线路" }
         check(consented) { "请先阅读并同意隐私说明，再使用定位" }
         check(hasPermission()) { "未获得定位权限，请在系统设置中允许定位，或手动搜索线路" }
         return mutex.withLock {
@@ -67,14 +67,14 @@ class LocationService @Inject constructor(@ApplicationContext context: Context) 
                         location.errorCode != 0 -> {
                             val message = when (location.errorCode) {
                                 4 -> "定位网络连接失败，请检查网络后重试"
-                                7 -> "高德地图 Key 或签名校验失败，请检查应用配置"
+                                7 -> "定位服务暂不可用，请稍后重试"
                                 9 -> "系统定位初始化失败，请检查系统定位开关"
                                 12, 13 -> "定位权限不足，请在系统设置中允许定位"
                                 14 -> "系统定位服务已关闭，请打开定位开关"
                                 18 -> "定位服务启动失败，请稍后重试"
                                 else -> "定位失败，请检查定位权限、系统定位开关和网络"
                             }
-                            continuation.resumeWithException(IllegalStateException("$message（错误码 ${location.errorCode}）"))
+                            continuation.resumeWithException(IllegalStateException(message))
                         }
                         else -> {
                             val point = GeoPoint(location.latitude, location.longitude)
@@ -95,7 +95,7 @@ class LocationService @Inject constructor(@ApplicationContext context: Context) 
         } catch (error: IllegalStateException) {
             throw error
         } catch (error: Exception) {
-            throw IllegalStateException("无法启动高德定位，请检查地图配置和系统定位服务", error)
+            throw IllegalStateException("无法启动定位，请检查系统定位开关", error)
         } finally {
             client?.let {
                 runCatching { it.stopLocation() }

@@ -76,7 +76,7 @@ internal object ResponseDecoder {
                     }
                     output.toByteArray()
                 }
-                else -> throw ProtocolException("暂不支持公交响应压缩格式：$encoding")
+                else -> throw ProtocolException("公交数据读取失败，请稍后重试")
             }
             if (frame.size < 12) throw ProtocolException("公交响应不完整，请稍后重试")
             val reader = BinaryReader(frame)
@@ -90,7 +90,7 @@ internal object ResponseDecoder {
                 val message = payload.toString(Charsets.UTF_8).trim()
                 throw ServerMessageException(if (message.isBlank()) "公交服务拒绝了请求，请稍后重试" else "公交服务提示：$message")
             }
-            if (flag != 1) throw ProtocolException("公交响应状态异常（$flag）")
+            if (flag != 1) throw ProtocolException("公交数据读取失败，请稍后重试")
             if (length == 0) throw EmptyFrameException(command)
             val token = header("token")?.takeIf { it.isNotBlank() }
             val session = header("sessionId")?.takeIf { it.isNotBlank() }

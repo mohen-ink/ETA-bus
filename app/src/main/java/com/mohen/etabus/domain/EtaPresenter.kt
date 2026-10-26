@@ -1,6 +1,7 @@
 package com.mohen.etabus.domain
 
 import com.mohen.etabus.model.Arrival
+import com.mohen.etabus.model.BusVehicle
 import com.mohen.etabus.model.EtaDisplay
 import com.mohen.etabus.model.EtaKind
 import com.mohen.etabus.model.RouteDetail
@@ -75,6 +76,42 @@ object EtaPresenter {
             return EtaDisplay("暂无来车", updated(route.updatedAt), EtaKind.IDLE)
         }
         return EtaDisplay("暂无数据", arrival?.let { updated(it.updatedAt) } ?: "等待实时数据", EtaKind.IDLE)
+    }
+
+    fun secondBus(detail: RouteDetail?, waitingIndex: Int, first: Arrival?): EtaDisplay? {
+        if (detail == null || waitingIndex !in detail.stations.indices) return null
+        val ahead = detail.buses.filter { it.index in 0..waitingIndex }.sortedBy { stopsTo(it, waitingIndex) }
+        val firstNumber = first?.busNumber?.trim().orEmpty()
+        val firstPosition = ahead.indexOfFirst { firstNumber.isNotEmpty() && it.busNumber.trim() == firstNumber }
+        val bus = ahead.getOrNull(if (firstPosition >= 0) firstPosition + 1 else 1)
+            ?: return EtaDisplay("暂无来车", "", EtaKind.IDLE)
+        val stops = stopsTo(bus, waitingIndex)
+        if (stops <= 0) return EtaDisplay("已到站", "", EtaKind.ARRIVING, true)
+        val meters = distanceTo(detail, bus, waitingIndex)
+        val pace = first?.takeIf { it.stops > 0 }?.let { a ->
+            a.validMinutes?.let { m -> a.validDistance?.takeIf { it > 0 }?.let { m / it } }
+        }?.takeIf { it in 0.001..0.01 } ?: DEFAULT_MINUTES_PER_METER
+        val minutes = meters?.let { "约${ceil(it * pace).toInt().coerceAtLeast(1)}分钟" }.orEmpty()
+        val distance = meters?.let(::formatDistance).orEmpty()
+        return EtaDisplay("${stops}站", listOf(minutes, distance).filter { it.isNotBlank() }.joinToString(" · "), EtaKind.LIVE, true)
+    }
+
+    private const val DEFAULT_MINUTES_PER_METER = 0.003
+
+    private fun stopsTo(bus: BusVehicle, waitingIndex: Int): Int = waitingIndex - bus.index + if (bus.approaching) 1 else 0
+
+    private fun distanceTo(detail: RouteDetail, bus: BusVehicle, waitingIndex: Int): Double? {
+        val points = detail.stationPoints
+        var total = if (bus.approaching) {
+            bus.fittedDistance.takeIf { it > 0 && it.isFinite() }
+                ?: bus.point?.let { p -> points.getOrNull(bus.index)?.let(p::distanceTo) } ?: return null
+        } else 0.0
+        for (i in bus.index until waitingIndex) {
+            val a = points.getOrNull(i) ?: return null
+            val b = points.getOrNull(i + 1) ?: return null
+            total += a.distanceTo(b)
+        }
+        return total
     }
 
     private fun safeTimeTips(value: String): String {

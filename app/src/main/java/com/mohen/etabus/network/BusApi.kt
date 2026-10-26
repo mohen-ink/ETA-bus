@@ -36,7 +36,7 @@ class BusApi @Inject constructor() {
         owner: String = "default",
         priority: Int = 0
     ): List<Platform> {
-        if (!center.valid) throw BusApiException("缺少有效查询坐标，请先定位或选择地图中心")
+        if (!center.valid) throw BusApiException("请先定位或设置位置")
         if (radius <= 0) throw BusApiException("查询半径必须大于零")
         return request(city, 204, Commands.nearby(city, center, radius, keyword), owner, priority) {
             Commands.platforms(it).items.distinctBy { platform -> platform.key }
@@ -131,7 +131,7 @@ class BusApi @Inject constructor() {
                 override fun onResponse(call: Call, response: Response) {
                     try {
                         val plain = response.use {
-                            if (!it.isSuccessful) throw BusApiException("公交服务连接异常（HTTP ${it.code}），请稍后重试")
+                            if (!it.isSuccessful) throw BusApiException("公交服务暂时不可用，请稍后重试")
                             val body = it.body ?: throw ProtocolException("公交服务未返回响应内容")
                             if (body.contentLength() > ResponseDecoder.MAX_BYTES) throw ProtocolException("公交响应过大，请稍后重试")
                             val output = ByteArrayOutputStream()
