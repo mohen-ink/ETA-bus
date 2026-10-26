@@ -56,7 +56,7 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     packaging {
-        jniLibs.useLegacyPackaging = false
+        jniLibs.useLegacyPackaging = true
         resources.excludes += setOf("META-INF/AL2.0", "META-INF/LGPL2.1")
     }
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/cityAssets").get().asFile)

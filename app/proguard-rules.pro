@@ -1,8 +1,9 @@
 -keepattributes Signature,InnerClasses,EnclosingMethod,*Annotation*
 -keep class com.mohen.etabus.model.** { *; }
--keep class com.amap.api.** { *; }
+-keep class com.amap.** { *; }
 -keep class com.autonavi.** { *; }
 -keep class com.loc.** { *; }
+-keepclasseswithmembernames,includedescriptorclasses class * { native <methods>; }
 -dontwarn com.amap.**
 -dontwarn com.autonavi.**
 -dontwarn com.loc.**
