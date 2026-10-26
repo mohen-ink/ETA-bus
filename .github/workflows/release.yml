@@ -14,6 +14,19 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - name: Extract changelog
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          awk -v ver="$VERSION" '
+            /^## / { if (found) exit; if (index($0, "[" ver "]") || $2 == ver) { found = 1; next } }
+            found { print }
+          ' CHANGELOG.md | sed -e '/./,$!d' > RELEASE_NOTES.md
+          if [ ! -s RELEASE_NOTES.md ]; then
+            echo "::error::CHANGELOG.md 中没有找到版本 $VERSION 的条目，请先添加 \"## [$VERSION]\" 段落"
+            exit 1
+          fi
+          cat RELEASE_NOTES.md
+
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
@@ -60,4 +73,4 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           files: dist/*.apk
-          generate_release_notes: true
+          body_path: RELEASE_NOTES.md
