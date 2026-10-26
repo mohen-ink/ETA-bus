@@ -16,7 +16,12 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathFillType
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -214,7 +219,6 @@ internal fun SettingsScreen(state: BusUiState, model: BusViewModel, actions: UiA
         item {
             SettingsGroup("外观") {
                 SettingRow("深色模式", when (state.settings.theme) { ThemeMode.SYSTEM -> "跟随系统"; ThemeMode.LIGHT -> "浅色"; ThemeMode.DARK -> "深色" }, { options = "theme" })
-                SettingRow("到站数字样式", if (state.settings.digitFont == DigitFont.MONO) "等宽" else "点阵", { options = "font" })
             }
         }
         item {
@@ -226,6 +230,13 @@ internal fun SettingsScreen(state: BusUiState, model: BusViewModel, actions: UiA
         }
         item {
             SettingsGroup("关于") {
+                SettingRow("作者", "mohen", null)
+                Row(Modifier.fillMaxWidth().clickable { openLink(context, GITHUB_URL) }.padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("GitHub", Modifier.weight(1f))
+                    Icon(GitHubIcon, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("mohen-ink/ETA-bus", Modifier.padding(start = 6.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Icon(Icons.Rounded.ChevronRight, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
                 SettingRow("隐私说明", if (state.settings.privacyAccepted) "" else "未同意", actions.privacy)
                 SettingRow("数据来源", "", { source = true })
                 SettingRow("开源许可", "", { actions.navigate("license") })
@@ -239,23 +250,20 @@ internal fun SettingsScreen(state: BusUiState, model: BusViewModel, actions: UiA
         val labels: List<String> = when (option) {
             "radius" -> listOf("500 米", "1000 米", "3000 米")
             "refresh" -> listOf("15 秒", "30 秒", "60 秒", "关闭")
-            "theme" -> listOf("跟随系统", "浅色", "深色")
-            else -> listOf("等宽数字", "点阵数字")
+            else -> listOf("跟随系统", "浅色", "深色")
         }
         val chosen = when (option) {
             "radius" -> listOf(500, 1000, 3000).indexOf(state.settings.radius)
             "refresh" -> listOf(15, 30, 60, 0).indexOf(state.settings.refreshSeconds)
-            "theme" -> state.settings.theme.ordinal
-            else -> state.settings.digitFont.ordinal
+            else -> state.settings.theme.ordinal
         }
-        AlertDialog(onDismissRequest = { options = null }, title = { Text(when (option) { "radius" -> "附近搜索半径"; "refresh" -> "自动刷新间隔"; "theme" -> "深色模式"; else -> "到站数字字体" }) }, text = {
+        AlertDialog(onDismissRequest = { options = null }, title = { Text(when (option) { "radius" -> "附近搜索半径"; "refresh" -> "自动刷新间隔"; else -> "深色模式" }) }, text = {
             Column { labels.forEachIndexed { index, label ->
                 Row(Modifier.fillMaxWidth().clickable {
                     val settings = when (option) {
                         "radius" -> state.settings.copy(radius = listOf(500, 1000, 3000)[index])
                         "refresh" -> state.settings.copy(refreshSeconds = listOf(15, 30, 60, 0)[index])
-                        "theme" -> state.settings.copy(theme = ThemeMode.entries[index])
-                        else -> state.settings.copy(digitFont = DigitFont.entries[index])
+                        else -> state.settings.copy(theme = ThemeMode.entries[index])
                     }
                     model.updateSettings(settings); options = null
                 }, verticalAlignment = Alignment.CenterVertically) { RadioButton(chosen == index, onClick = null); Text(label, Modifier.padding(start = 8.dp)) }
@@ -270,6 +278,48 @@ internal fun SettingsScreen(state: BusUiState, model: BusViewModel, actions: UiA
             Text("公交数据：掌上公交。各城市数据覆盖情况以实际查询结果为准。\n\n地图与定位：高德地图。\n\n实时到站：第一辆车为公交平台实时预测；第二辆车根据车辆实时位置估算，仅供参考。\n\n本地存储：设置、浏览历史和收藏仅保存在本机，按城市分别保存。")
         }
     }, confirmButton = { TextButton({ source = false }) { Text("知道了") } })
+}
+
+private const val GITHUB_URL = "https://github.com/mohen-ink/ETA-bus"
+
+private fun openLink(context: android.content.Context, url: String) {
+    try { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
+    catch (_: android.content.ActivityNotFoundException) { }
+    catch (_: SecurityException) { }
+}
+
+private val GitHubIcon: ImageVector by lazy {
+    ImageVector.Builder("GitHub", 24.dp, 24.dp, 24f, 24f).apply {
+        path(fill = SolidColor(Color.Black), pathFillType = PathFillType.EvenOdd) {
+            moveTo(12f, 0.3f)
+            curveTo(5.37f, 0.3f, 0f, 5.67f, 0f, 12.3f)
+            curveTo(0f, 17.6f, 3.44f, 22.1f, 8.2f, 23.69f)
+            curveTo(8.8f, 23.8f, 9.02f, 23.43f, 9.02f, 23.11f)
+            curveTo(9.02f, 22.83f, 9.01f, 22.07f, 9f, 21.07f)
+            curveTo(5.66f, 21.79f, 4.96f, 19.46f, 4.96f, 19.46f)
+            curveTo(4.41f, 18.07f, 3.63f, 17.7f, 3.63f, 17.7f)
+            curveTo(2.54f, 16.96f, 3.71f, 16.97f, 3.71f, 16.97f)
+            curveTo(4.92f, 17.06f, 5.55f, 18.21f, 5.55f, 18.21f)
+            curveTo(6.62f, 20.05f, 8.36f, 19.52f, 9.04f, 19.21f)
+            curveTo(9.15f, 18.44f, 9.46f, 17.91f, 9.8f, 17.61f)
+            curveTo(7.14f, 17.31f, 4.34f, 16.28f, 4.34f, 11.67f)
+            curveTo(4.34f, 10.36f, 4.81f, 9.29f, 5.58f, 8.45f)
+            curveTo(5.45f, 8.15f, 5.04f, 6.93f, 5.69f, 5.28f)
+            curveTo(5.69f, 5.28f, 6.7f, 4.96f, 8.99f, 6.51f)
+            curveTo(9.95f, 6.24f, 10.98f, 6.11f, 12f, 6.11f)
+            curveTo(13.02f, 6.11f, 14.05f, 6.24f, 15.01f, 6.51f)
+            curveTo(17.3f, 4.96f, 18.31f, 5.28f, 18.31f, 5.28f)
+            curveTo(18.96f, 6.93f, 18.55f, 8.15f, 18.43f, 8.45f)
+            curveTo(19.2f, 9.29f, 19.66f, 10.36f, 19.66f, 11.67f)
+            curveTo(19.66f, 16.29f, 16.85f, 17.31f, 14.18f, 17.6f)
+            curveTo(14.61f, 17.97f, 15f, 18.7f, 15f, 19.82f)
+            curveTo(15f, 21.42f, 14.99f, 22.72f, 14.99f, 23.11f)
+            curveTo(14.99f, 23.43f, 15.2f, 23.81f, 15.81f, 23.69f)
+            curveTo(20.57f, 22.1f, 24f, 17.6f, 24f, 12.3f)
+            curveTo(24f, 5.67f, 18.63f, 0.3f, 12f, 0.3f)
+            close()
+        }
+    }.build()
 }
 
 @Composable
@@ -306,7 +356,6 @@ internal fun LicenseScreen(back: () -> Unit, network: (() -> Unit) -> Unit) {
             items(listOf("AndroidX / Jetpack Compose / Material / Navigation / Lifecycle" to "The Android Open Source Project · Apache License 2.0", "Kotlin / kotlinx.coroutines" to "JetBrains s.r.o. and contributors · Apache License 2.0", "Hilt / Dagger" to "Google, Inc. and contributors · Apache License 2.0", "OkHttp" to "Square, Inc. and contributors · Apache License 2.0")) { (name, attribution) ->
                 BusCard { Text(name, style = MaterialTheme.typography.titleMedium); Text(attribution, style = MaterialTheme.typography.bodySmall); TextButton({ license = "Apache License 2.0" }) { Text("查看许可与官方原文") } }
             }
-            item { BusCard { Text("到站数字字形", style = MaterialTheme.typography.titleMedium); Text("等宽模式使用系统字体；点阵模式为本应用自绘的 5×7 点阵数字。", style = MaterialTheme.typography.bodyMedium) } }
             item { BusCard { Text("高德地图与定位", style = MaterialTheme.typography.titleMedium); Text("高德 SDK 不属于上述开源组件，使用须遵循高德开放平台服务协议与隐私政策。", style = MaterialTheme.typography.bodySmall); TextButton({ openUrl("https://lbs.amap.com/pages/terms/") }) { Text("高德服务协议") } } }
         }
     }

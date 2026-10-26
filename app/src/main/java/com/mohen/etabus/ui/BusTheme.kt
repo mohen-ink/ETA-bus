@@ -9,7 +9,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import com.mohen.etabus.model.*
 
-internal val LocalDigitFont = staticCompositionLocalOf { DigitFont.MONO }
 internal val LiveAmber: Color @Composable get() = if (MaterialTheme.colorScheme.background == Color(0xFF0E1220)) Color(0xFFFFB84D) else Color(0xFFF59E0B)
 internal val ArrivingGreen: Color @Composable get() = if (MaterialTheme.colorScheme.background == Color(0xFF0E1220)) Color(0xFF34D399) else Color(0xFF10B981)
 internal val AlertOrange: Color @Composable get() = MaterialTheme.colorScheme.error
@@ -34,7 +33,5 @@ internal fun BusTheme(settings: AppSettings, content: @Composable () -> Unit) {
         bodyLarge = TextStyle(fontSize = 15.sp), bodyMedium = TextStyle(fontSize = 15.sp),
         bodySmall = TextStyle(fontSize = 13.sp), labelSmall = TextStyle(fontSize = 13.sp)
     )
-    CompositionLocalProvider(LocalDigitFont provides settings.digitFont) {
-        MaterialTheme(colorScheme = colors, typography = typography, content = content)
-    }
+    MaterialTheme(colorScheme = colors, typography = typography, content = content)
 }

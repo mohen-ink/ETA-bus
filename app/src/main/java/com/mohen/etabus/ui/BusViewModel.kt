@@ -153,8 +153,7 @@ class BusViewModel @Inject constructor(
                 current.copy(
                     radius = if (value.radius != baseline.radius) value.radius else current.radius,
                     refreshSeconds = if (value.refreshSeconds != baseline.refreshSeconds) value.refreshSeconds else current.refreshSeconds,
-                    theme = if (value.theme != baseline.theme) value.theme else current.theme,
-                    digitFont = if (value.digitFont != baseline.digitFont) value.digitFont else current.digitFont
+                    theme = if (value.theme != baseline.theme) value.theme else current.theme
                 )
             }
         }

@@ -58,38 +58,10 @@ fun LivePulse(active: Boolean, modifier: Modifier = Modifier, color: Color = Liv
     }
 }
 
-private val dotGlyphs = mapOf(
-    '0' to listOf("01110","10001","10011","10101","11001","10001","01110"),
-    '1' to listOf("00100","01100","00100","00100","00100","00100","01110"),
-    '2' to listOf("01110","10001","00001","00010","00100","01000","11111"),
-    '3' to listOf("11110","00001","00001","01110","00001","00001","11110"),
-    '4' to listOf("00010","00110","01010","10010","11111","00010","00010"),
-    '5' to listOf("11111","10000","10000","11110","00001","00001","11110"),
-    '6' to listOf("01110","10000","10000","11110","10001","10001","01110"),
-    '7' to listOf("11111","00001","00010","00100","01000","01000","01000"),
-    '8' to listOf("01110","10001","10001","01110","10001","10001","01110"),
-    '9' to listOf("01110","10001","10001","01111","00001","00001","01110")
-)
-
 @Composable
 private fun LedTitle(text: String, color: Color) {
-    if (LocalDigitFont.current == DigitFont.MONO) {
-        Text(text, color = color, fontSize = 22.sp, fontWeight = FontWeight.Bold,
-            fontFamily = FontFamily.Monospace, style = TextStyle(fontFeatureSettings = "tnum"))
-    } else {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.semantics(mergeDescendants = true) { contentDescription = text }) {
-            text.forEach { char ->
-                val glyph = dotGlyphs[char]
-                if (glyph == null) Text(char.toString(), fontSize = 22.sp, color = color, fontWeight = FontWeight.Bold)
-                else Canvas(Modifier.size(17.dp, 25.dp).clearAndSetSemantics { }) {
-                    val cell = size.width / 6
-                    glyph.forEachIndexed { y, row -> row.forEachIndexed { x, pixel ->
-                        if (pixel == '1') drawCircle(color, cell * .33f, Offset((x + 1) * cell, (y + .5f) * size.height / 7))
-                    } }
-                }
-            }
-        }
-    }
+    Text(text, color = color, fontSize = 22.sp, fontWeight = FontWeight.Bold,
+        fontFamily = FontFamily.Monospace, style = TextStyle(fontFeatureSettings = "tnum"))
 }
 
 @Composable

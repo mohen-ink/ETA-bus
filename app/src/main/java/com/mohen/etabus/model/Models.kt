@@ -70,10 +70,9 @@ data class RouteSelection(
 ) : Serializable
 
 enum class ThemeMode { SYSTEM, LIGHT, DARK }
-enum class DigitFont { MONO, DOT }
 data class AppSettings(
     val cityCode: String = "0719", val radius: Int = 1000, val refreshSeconds: Int = 30,
-    val theme: ThemeMode = ThemeMode.SYSTEM, val digitFont: DigitFont = DigitFont.MONO,
+    val theme: ThemeMode = ThemeMode.SYSTEM,
     val privacyAccepted: Boolean = false, val searchHistory: List<String> = emptyList(),
     val recentCities: List<String> = emptyList()
 )
