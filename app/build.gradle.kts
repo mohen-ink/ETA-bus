@@ -14,6 +14,9 @@ val amapKey = local.getProperty("AMAP_API_KEY", "")
 val keystoreProperties = Properties().apply {
     rootProject.file("keystore.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
 }
+val hasSigning = keystoreProperties.getProperty("storeFile")?.let { rootProject.file(it).exists() } == true
+val abiList = (findProperty("abiFilters") as String?)?.split(',')?.map(String::trim)?.filter(String::isNotEmpty)
+    ?: listOf("arm64-v8a", "armeabi-v7a", "x86_64")
 
 android {
     namespace = "com.mohen.etabus"
@@ -22,28 +25,28 @@ android {
         applicationId = "com.mohen.etabus"
         minSdk = 26
         targetSdk = 37
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = (findProperty("versionCode") as String?)?.toIntOrNull() ?: 1
+        versionName = (findProperty("versionName") as String?) ?: "0.1.0"
         manifestPlaceholders["AMAP_API_KEY"] = amapKey
         buildConfigField("boolean", "AMAP_CONFIGURED", amapKey.isNotBlank().toString())
-        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64") }
+        ndk { abiFilters += abiList }
     }
     buildFeatures {
         compose = true
         buildConfig = true
     }
     signingConfigs {
-        create("appSigning") {
-            storeFile = keystoreProperties.getProperty("storeFile")?.let { rootProject.file(it) }
+        if (hasSigning) create("appSigning") {
+            storeFile = rootProject.file(keystoreProperties.getProperty("storeFile"))
             storePassword = keystoreProperties.getProperty("storePassword")
             keyAlias = keystoreProperties.getProperty("keyAlias")
             keyPassword = keystoreProperties.getProperty("keyPassword")
         }
     }
     buildTypes {
-        debug { signingConfig = signingConfigs.getByName("appSigning") }
+        debug { if (hasSigning) signingConfig = signingConfigs.getByName("appSigning") }
         release {
-            signingConfig = signingConfigs.getByName("appSigning")
+            if (hasSigning) signingConfig = signingConfigs.getByName("appSigning")
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
