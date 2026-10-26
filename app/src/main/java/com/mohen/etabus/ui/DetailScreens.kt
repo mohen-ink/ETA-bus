@@ -113,7 +113,8 @@ internal fun StationScreen(state: BusUiState, model: BusViewModel, actions: UiAc
                 }
                 PullToRefreshBox(isRefreshing = state.refreshing, onRefresh = { actions.network { platform?.let(model::loadPlatform) } }, modifier = Modifier.weight(1f)) {
                     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        item { NoticeBanner(state.stationArrivals.mapNotNull { arrival -> arrival.exceptionMsg.takeIf(String::isNotBlank)?.let { "${normalizeRoute(arrival.routeName)}：$it" } }) }
+                        item { NoticeBanner(state.stationNotices) }
+                        item { StaleWarning(state.errors["notices"], { actions.network { platform?.let(model::loadPlatform) } }) }
                         item { StaleWarning(platform?.let { state.errors[it.key] }, { actions.network { platform?.let(model::loadPlatform) } }) }
                         if (platform?.key in state.loadingKeys && state.stationArrivals.isEmpty()) items(3) { Skeleton(Modifier.fillMaxWidth().height(70.dp)) }
                         itemsIndexed(state.stationArrivals.distinctBy { it.key }, key = { _, it -> it.key }) { index, arrival ->
@@ -195,7 +196,8 @@ internal fun RouteScreen(state: BusUiState, model: BusViewModel, actions: UiActi
                     StaleWarning(state.errors["route"], { actions.network { model.loadRoute() } })
                     StaleWarning(arrivalError, { actions.network { selection.platform?.let(model::loadPlatform) } })
                 }
-                item { NoticeBanner(filtered.mapNotNull { it.exceptionMsg.takeIf(String::isNotBlank) }) }
+                item { NoticeBanner(state.routeNotices) }
+                item { StaleWarning(state.errors["notices"], { actions.network { model.loadRoute() } }) }
                 item {
                     BusCard {
                         Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable(enabled = detail != null) { chooser = "waiting" }, verticalAlignment = Alignment.CenterVertically) {

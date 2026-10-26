@@ -26,6 +26,8 @@ data class StationGroup(val name: String, val platforms: List<Platform>, val dis
     val key: String get() = platforms.firstOrNull()?.key ?: name
 }
 
+data class RouteDirection(val routeName: String, val direction: String)
+
 data class FirstLastClass(val beginTime: String = "", val endTime: String = "", val raw: ByteArray = byteArrayOf()) : Serializable
 
 data class Arrival(

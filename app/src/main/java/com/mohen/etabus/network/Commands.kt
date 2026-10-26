@@ -7,6 +7,7 @@ import com.mohen.etabus.model.FirstLastClass
 import com.mohen.etabus.model.GeoPoint
 import com.mohen.etabus.model.Platform
 import com.mohen.etabus.model.RouteDetail
+import com.mohen.etabus.model.RouteDirection
 import com.mohen.etabus.model.RouteSelection
 import com.mohen.etabus.model.RouteSummary
 import com.mohen.etabus.model.normalizeRoute
@@ -15,6 +16,22 @@ import kotlinx.coroutines.CancellationException
 internal data class ResultVector<T>(val items: List<T>, val unknownTail: ByteArray)
 
 internal object Commands {
+    fun specialNotices(routes: List<RouteDirection>): ByteArray = binary {
+        int(routes.size)
+        routes.forEach { route ->
+            sized(binary {
+                utf(route.routeName); utf(route.direction)
+                int(0); int(0)
+                repeat(4) { utf("") }
+                int(0); int(0)
+            })
+        }
+    }
+
+    fun notices(plain: ByteArray): ResultVector<List<String>> = vector(plain) { reader ->
+        vector(reader.rest()) { it.utf() }.items.filter(String::isNotBlank).distinct()
+    }
+
     fun nearby(city: CityConfig, center: GeoPoint, radius: Int, keyword: String): ByteArray = binary {
         utf(""); utf(""); utf(center.lat.toString()); utf(center.lng.toString()); utf(radius.toString())
         utf("公交站"); utf(keyword); utf("")

@@ -110,16 +110,28 @@ fun NoticeBanner(notices: List<String>, modifier: Modifier = Modifier) {
     val messages = notices.filter(String::isNotBlank).distinct()
     if (messages.isEmpty()) return
     var index by remember(messages) { mutableIntStateOf(0) }
-    var expanded by remember(messages) { mutableStateOf(false) }
-    LaunchedEffect(messages, expanded) { if (!expanded) while (true) { delay(5000); index = (index + 1) % messages.size } }
-    Surface(modifier.fillMaxWidth().clickable { expanded = !expanded }, shape = RoundedCornerShape(16.dp),
+    var expanded by remember(messages, index) { mutableStateOf(false) }
+    var truncated by remember(messages, index) { mutableStateOf(false) }
+    val expandable = expanded || truncated
+    LaunchedEffect(messages, expanded) {
+        if (messages.size > 1 && !expanded) while (true) { delay(5000); index = (index + 1) % messages.size }
+    }
+    Surface(modifier.fillMaxWidth().then(if (expandable) Modifier.clickable { expanded = !expanded } else Modifier),
+        shape = RoundedCornerShape(16.dp),
         color = if (MaterialTheme.colorScheme.background == Color(0xFF0E1220)) Color(0xFF2A2414) else Color(0xFFFFF7E6)) {
         Column(Modifier.padding(12.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Icon(Icons.Rounded.Info, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(messages[index], Modifier.weight(1f), maxLines = if (expanded) Int.MAX_VALUE else 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
+                Text(messages[index], Modifier.weight(1f), maxLines = if (expanded) Int.MAX_VALUE else 2,
+                    overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall,
+                    onTextLayout = { if (!expanded) truncated = it.hasVisualOverflow })
             }
-            Text("${index + 1}/${messages.size}  ${if (expanded) "收起" else "展开"}", Modifier.align(Alignment.End), color = MaterialTheme.colorScheme.primary, fontSize = 12.sp)
+            if (messages.size > 1 || expandable) {
+                Row(Modifier.align(Alignment.End), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    if (messages.size > 1) Text("${index + 1}/${messages.size}", color = MaterialTheme.colorScheme.primary, fontSize = 12.sp)
+                    if (expandable) Text(if (expanded) "收起" else "展开", color = MaterialTheme.colorScheme.primary, fontSize = 12.sp)
+                }
+            }
         }
     }
 }

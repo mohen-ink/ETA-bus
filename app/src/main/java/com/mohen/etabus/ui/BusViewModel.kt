@@ -27,6 +27,7 @@ data class BusUiState(
     val nearby: List<StationGroup> = emptyList(),
     val expanded: Set<String> = emptySet(),
     val arrivals: Map<String, List<Arrival>> = emptyMap(),
+    val specialNotices: Map<RouteDirection, List<String>> = emptyMap(),
     val loadingKeys: Set<String> = emptySet(),
     val errors: Map<String, String> = emptyMap(),
     val loading: Boolean = false,
@@ -51,6 +52,12 @@ data class BusUiState(
     val platform: Platform? get() = station?.platforms?.getOrNull(platformIndex)
     val stationArrivals: List<Arrival> get() = platform?.let { arrivals[it.key] }.orEmpty()
     val routeArrivals: List<Arrival> get() = selection?.platform?.let { arrivals[it.key] }.orEmpty()
+    val stationNotices: List<String> get() = stationArrivals
+        .map { RouteDirection(normalizeRoute(it.routeName), it.direction) }.distinct()
+        .flatMap { route -> specialNotices[route].orEmpty().map { "${route.routeName}：$it" } }.distinct()
+    val routeNotices: List<String> get() = selection?.let {
+        specialNotices[RouteDirection(normalizeRoute(it.routeName), it.direction)]
+    }.orEmpty()
 }
 
 @HiltViewModel
@@ -110,7 +117,8 @@ class BusViewModel @Inject constructor(
         searchJob = null
         visibleFavorites = emptySet()
         visibleNearby = emptySet()
-        mutable.update { it.copy(loading = false, searchLoading = false, refreshing = false, loadingKeys = emptySet()) }
+        mutable.update { it.copy(loading = false, searchLoading = false, refreshing = false,
+            loadingKeys = emptySet(), specialNotices = emptyMap(), errors = it.errors - "notices") }
     }
 
     fun onPage(page: String) {
@@ -263,10 +271,26 @@ class BusViewModel @Inject constructor(
         mutable.update { it.copy(loadingKeys = it.loadingKeys + platform.key, errors = it.errors - platform.key) }
         try {
             val records = api.station(city, platform, owner = requestOwner, priority = priority)
+            if (requestOwner != owner || mutable.value.city.code != city.code) return
             mutable.update { it.copy(arrivals = it.arrivals + (platform.key to records)) }
+            if (mutable.value.page == "station" && mutable.value.platform?.key == platform.key) {
+                fetchSpecialNotices(records.map { RouteDirection(normalizeRoute(it.routeName), it.direction) }, requestOwner, city, priority)
+            }
         } catch (e: CancellationException) { throw e }
-        catch (e: Exception) { error(platform.key, e) }
-        finally { mutable.update { it.copy(loadingKeys = it.loadingKeys - platform.key) } }
+        catch (e: Exception) { if (requestOwner == owner) error(platform.key, e) }
+        finally { if (requestOwner == owner) mutable.update { it.copy(loadingKeys = it.loadingKeys - platform.key) } }
+    }
+
+    private suspend fun fetchSpecialNotices(routes: List<RouteDirection>, requestOwner: String, city: CityConfig, priority: Int = 0) {
+        if (requestOwner != owner || mutable.value.city.code != city.code) return
+        mutable.update { it.copy(errors = it.errors - "notices") }
+        try {
+            val results = api.specialNotices(city, routes, owner = requestOwner, priority = priority)
+            if (requestOwner == owner && mutable.value.city.code == city.code) {
+                mutable.update { it.copy(specialNotices = it.specialNotices + results) }
+            }
+        } catch (e: CancellationException) { throw e }
+        catch (e: Exception) { if (requestOwner == owner) error("notices", e) }
     }
 
     fun openStation(group: StationGroup) {
@@ -303,6 +327,7 @@ class BusViewModel @Inject constructor(
                 mutable.update { it.copy(loading = false, searchLoading = false, refreshing = false) }
                 return@launch
             }
+            launch { fetchSpecialNotices(listOf(RouteDirection(normalizeRoute(selection.routeName), selection.direction)), requestOwner, city) }
             mutable.update { it.copy(loading = it.detail == null, errors = it.errors - "route") }
             try {
                 if (mutable.value.detail == null) store.cachedRoute(city.code, selection.routeName, selection.direction)?.let { cached ->
@@ -343,6 +368,7 @@ class BusViewModel @Inject constructor(
                 mutable.update { it.copy(loading = false, searchLoading = false, refreshing = false) }
                 return@launch
             }
+            launch { fetchSpecialNotices(listOf(RouteDirection(normalizeRoute(next.routeName), next.direction)), requestOwner, city) }
             try {
                 val detail = api.route(city, next, owner = requestOwner)
                 val index = detail.stations.indexOf(oldName)
@@ -518,6 +544,7 @@ class BusViewModel @Inject constructor(
                     } catch (e: CancellationException) { throw e }
                     catch (e: Exception) { error("route", e) }
                     selection.platform?.let { fetchPlatform(it, requestOwner, state.city, 1) }
+                    fetchSpecialNotices(listOf(RouteDirection(normalizeRoute(selection.routeName), selection.direction)), requestOwner, state.city, 1)
                 }
                 "favorites" -> queryVisible(favoritePlatforms(), "favorites", 1)
             }

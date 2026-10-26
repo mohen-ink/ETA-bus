@@ -5,6 +5,7 @@ import com.mohen.etabus.model.CityConfig
 import com.mohen.etabus.model.GeoPoint
 import com.mohen.etabus.model.Platform
 import com.mohen.etabus.model.RouteDetail
+import com.mohen.etabus.model.RouteDirection
 import com.mohen.etabus.model.RouteSelection
 import com.mohen.etabus.model.RouteSummary
 import com.mohen.etabus.model.normalizeRoute
@@ -53,6 +54,24 @@ class BusApi @Inject constructor() {
     ): List<Arrival> {
         if (!platform.point.valid) throw BusApiException("站台坐标无效，请重新选择站台")
         return request(city, 149, Commands.station(platform), owner, priority) { Commands.arrivals(it).items }
+    }
+
+    suspend fun specialNotices(
+        city: CityConfig,
+        routes: List<RouteDirection>,
+        owner: String = "default",
+        priority: Int = 0
+    ): Map<RouteDirection, List<String>> {
+        val requested = routes.map { it.copy(routeName = normalizeRoute(it.routeName)) }.distinct()
+        if (requested.isEmpty()) return emptyMap()
+        if (requested.any { it.routeName.isBlank() || it.direction.isBlank() }) {
+            throw BusApiException("请选择有效线路和方向")
+        }
+        return request(city, 181, Commands.specialNotices(requested), owner, priority) { plain ->
+            val results = Commands.notices(plain).items
+            if (results.size != requested.size) throw ProtocolException("线路公告数量异常，请稍后重试")
+            requested.zip(results).toMap()
+        }
     }
 
     suspend fun route(
